@@ -3,7 +3,7 @@ name: Deploy Maven Application to EC2
 on:
   push:
     branches:
-      - javatest2
+      - main
 
 jobs:
   build:
