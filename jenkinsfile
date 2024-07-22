@@ -1,0 +1,53 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials-id')
+        EC2_USER = 'ec2-user'
+        EC2_HOST = 'your-ec2-public-dns'
+        SSH_KEY = credentials('your-ssh-key-id')
+    }
+
+    stages {
+        stage('Clone Repository') {
+            steps {
+                git branch: 'main', url: 'https://github.com/rajubhovi1111111111/aws-deploy-demo.git'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    docker.build("your-app:latest")
+                }
+            }
+        }
+
+        stage('Push Docker Image to DockerHub') {
+            steps {
+                script {
+                    docker.withRegistry('https://registry.hub.docker.com', 'DOCKERHUB_CREDENTIALS') {
+                        docker.image('your-app:latest').push()
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to EC2') {
+            steps {
+                sshagent(['SSH_KEY']) {
+                    script {
+                        sh '''
+                            ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << EOF
+                            docker pull your-dockerhub-username/your-app:latest
+                            docker stop your-app || true
+                            docker rm your-app || true
+                            docker run -d --name your-app -p 8080:8080 your-dockerhub-username/your-app:latest
+                            EOF
+                        '''
+                    }
+                }
+            }
+        }
+    }
+}
