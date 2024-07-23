@@ -2,52 +2,50 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials-id')
-        EC2_USER = 'ec2-user'
-        EC2_HOST = 'your-ec2-public-dns'
-        SSH_KEY = credentials('your-ssh-key-id')
+        DOCKER_IMAGE = 'my-java-app:latest'
+        EC2_USER = credentials('ec2-ssh-key') // Refers to the SSH private key stored
+        EC2_HOST = 'your-ec2-instance-ip'
     }
 
     stages {
-        stage('Clone Repository') {
+        stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/rajubhovi1111111111/aws-deploy-demo.git'
+                checkout scm
             }
         }
-
+        stage('Build') {
+            steps {
+                script {
+                    // Build the Java application using Maven
+                    sh 'mvn clean package'
+                }
+            }
+        }
         stage('Build Docker Image') {
             steps {
                 script {
-                    docker.build("your-app:latest")
+                    // Build Docker image on the Jenkins instance (EC2)
+                    sh "docker build -t ${DOCKER_IMAGE} ."
                 }
             }
         }
-
-        stage('Push Docker Image to DockerHub') {
+        stage('Deploy Docker Container') {
             steps {
                 script {
-                    docker.withRegistry('https://registry.hub.docker.com', 'DOCKERHUB_CREDENTIALS') {
-                        docker.image('your-app:latest').push()
-                    }
+                    // Deploy Docker container on the same EC2 instance
+                    sh """
+                        docker stop ${DOCKER_IMAGE} || true
+                        docker rm ${DOCKER_IMAGE} || true
+                        docker run -d --name ${DOCKER_IMAGE} -p 8080:8080 ${DOCKER_IMAGE}
+                    """
                 }
             }
         }
-
-        stage('Deploy to EC2') {
-            steps {
-                sshagent(['SSH_KEY']) {
-                    script {
-                        sh '''
-                            ssh -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << EOF
-                            docker pull your-dockerhub-username/your-app:latest
-                            docker stop your-app || true
-                            docker rm your-app || true
-                            docker run -d --name your-app -p 8080:8080 your-dockerhub-username/your-app:latest
-                            EOF
-                        '''
-                    }
-                }
-            }
+    }
+    post {
+        always {
+            // Clean up workspace
+            cleanWs()
         }
     }
 }
